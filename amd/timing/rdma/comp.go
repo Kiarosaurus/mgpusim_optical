@@ -2,6 +2,7 @@
 package rdma
 
 import (
+	"fmt"
 	"log"
 	"reflect"
 
@@ -149,6 +150,8 @@ func (c *Comp) processFromL1() bool {
 		if req == nil {
 			return madeProgress
 		}
+
+		fmt.Printf("[RDMA_DEBUG] %s: Recibida petición interna L1. Address: 0x%x\n", c.Name(), req.(mem.AccessReq).GetAddress())
 
 		switch req := req.(type) {
 		case mem.AccessReq:

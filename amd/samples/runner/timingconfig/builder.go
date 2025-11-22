@@ -19,8 +19,8 @@ type Builder struct {
 	simulation *simulation.Simulation
 
 	numGPUs            int
-	numCUPerSA         int
-	numSAPerGPU        int
+	numCUPerSA         int // Num Compute Units por Shader Array.
+	numSAPerGPU        int // Num Shader Array por GPU.
 	cpuMemSize         uint64
 	gpuMemSize         uint64
 	log2PageSize       uint64
@@ -68,13 +68,16 @@ func (b Builder) Build() *sim.Domain {
 
 	b.platform = &sim.Domain{}
 
-	b.globalStorage = mem.NewStorage(
+	b.globalStorage = mem.NewStorage( // Espacio de mem física TOTAL (para CPU y GPUs).
 		uint64(b.numGPUs)*b.gpuMemSize + b.cpuMemSize)
 
-	mmuComp, pageTable := b.createMMU()
-	gpuDriver := b.buildGPUDriver(pageTable)
+	mmuComp, pageTable := b.createMMU()      // Crea la MMU y PT.
+	gpuDriver := b.buildGPUDriver(pageTable) // Driver de la GPU.
 
-	gpuBuilder := b.createGPUBuilder(gpuDriver, mmuComp)
+	gpuBuilder := b.createGPUBuilder(gpuDriver, mmuComp) // Constructor de GPU a partir del paquete 'r9nano'.
+
+	// Crea el conector PCIe, el Root Complex (punto de origen de PCIe en la CPU),
+	// y la red PCIe a la que se conectarán las GPUs.
 	pcieConnector, rootComplexID :=
 		b.createConnection(gpuDriver, mmuComp)
 
@@ -83,7 +86,7 @@ func (b Builder) Build() *sim.Domain {
 	b.createRDMAAddrTable()
 	pmcAddressTable := b.createPMCPageTable()
 
-	b.createGPUs(
+	b.createGPUs( // Se crean e interconectan las GPUs según la lógica definida.
 		rootComplexID, pcieConnector,
 		gpuBuilder, gpuDriver,
 		pmcAddressTable)
@@ -168,12 +171,15 @@ func (b *Builder) createGPUs(
 	gpuDriver *driver.Driver,
 	pmcAddressTable *mem.BankedAddressPortMapper,
 ) {
+
+	// Topología de Red.
 	lastSwitchID := rootComplexID
 	for i := 1; i < b.numGPUs+1; i++ {
-		if i%2 == 1 {
+		if i%2 == 1 { // Por cada 2 GPUs se crea un nuevo switch PCIe (conectado al Root Complex).
 			lastSwitchID = pcieConnector.AddSwitch(rootComplexID)
 		}
 
+		// Se conectan esas 2 GPUs al switch recién creado.
 		b.createGPU(i, gpuBuilder, gpuDriver, pmcAddressTable,
 			pcieConnector, lastSwitchID)
 	}
@@ -197,6 +203,9 @@ func (b *Builder) createConnection(
 	gpuDriver *driver.Driver,
 	mmuComponent *mmu.Comp,
 ) (*pcie.Connector, int) {
+	// Utiliza un pcie.Connector para modelar una red PCIe versión 4 con 16 lanes
+	// (WithVersion(4, 16)) y una latencia de switch de 140 ciclos (WithSwitchLatency(140)).
+
 	// connection := sim.NewDirectConnection(engine)
 	// connection := noc.NewFixedBandwidthConnection(32, engine, 1*sim.GHz)
 	// connection.SrcBufferCapacity = 40960000
@@ -206,6 +215,8 @@ func (b *Builder) createConnection(
 		WithSwitchLatency(140)
 
 	pcieConnector.CreateNetwork("PCIe")
+
+	// Creación del Root Complex que conecta los puertos del driver y de la MMU.
 	rootComplexID := pcieConnector.AddRootComplex(
 		[]sim.Port{
 			gpuDriver.GetPortByName("GPU"),
@@ -226,14 +237,14 @@ func (b *Builder) createRDMAAddressMapper() {
 
 func (b *Builder) createGPU(
 	index int,
-	gpuBuilder r9nano.Builder,
+	gpuBuilder r9nano.Builder, // Utiliza la plantilla de 'r9nano' para construir un GPU con nombre y ID único.
 	gpuDriver *driver.Driver,
 	pmcAddressTable *mem.BankedAddressPortMapper,
 	pcieConnector *pcie.Connector,
 	pcieSwitchID int,
 ) *sim.Domain {
 	name := fmt.Sprintf("GPU[%d]", index)
-	memAddrOffset := uint64(index) * 4 * mem.GB
+	memAddrOffset := uint64(index) * 4 * mem.GB // Asigna un desplazamiento de dirección de memoria
 	gpu := gpuBuilder.
 		WithGPUID(uint64(index)).
 		WithMemAddrOffset(memAddrOffset).

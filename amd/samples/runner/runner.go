@@ -26,10 +26,11 @@ type verificationPreEnablingBenchmark interface {
 
 // Runner is a class that helps running the benchmarks in the official samples.
 type Runner struct {
-	simulation *simulation.Simulation
-	platform   *sim.Domain
-	reporter   *reporter
+	simulation *simulation.Simulation // motor de simulación
+	platform   *sim.Domain            // plataforma de HW
+	reporter   *reporter              // recolector de métricas
 
+	// Flags
 	Timing           bool
 	Verify           bool
 	Parallel         bool
@@ -41,15 +42,15 @@ type Runner struct {
 
 // Init initializes the platform simulate
 func (r *Runner) Init() *Runner {
-	r.parseFlag()
+	r.parseFlag() // Leer línea de comandos
 
 	log.SetFlags(log.Llongfile | log.Ldate | log.Ltime)
 
 	r.initSimulation()
 
-	if r.Timing {
+	if r.Timing { // timing simulation or...
 		r.buildTimingPlatform()
-	} else {
+	} else { // ... functional simulation?
 		r.buildEmuPlatform()
 	}
 
@@ -68,7 +69,7 @@ func (r *Runner) initSimulation() {
 	r.simulation = builder.Build()
 }
 
-func (r *Runner) buildEmuPlatform() {
+func (r *Runner) buildEmuPlatform() { // FUNCTIONAL simulation.
 	b := emusystem.MakeBuilder().
 		WithSimulation(r.simulation).
 		WithNumGPUs(r.GPUIDs[len(r.GPUIDs)-1])
@@ -80,7 +81,7 @@ func (r *Runner) buildEmuPlatform() {
 	r.platform = b.Build()
 }
 
-func (r *Runner) buildTimingPlatform() {
+func (r *Runner) buildTimingPlatform() { // TIMING simulation.
 	sampling.InitSampledEngine()
 
 	b := timingconfig.MakeBuilder().
@@ -137,11 +138,11 @@ func (r *Runner) AddBenchmarkWithoutSettingGPUsToUse(b benchmarks.Benchmark) {
 	r.benchmarks = append(r.benchmarks, b)
 }
 
-// Run runs the benchmark
+// Run runs the benchmark. PROGRAMA PRINCIPAL DE EMULACIÓN.
 func (r *Runner) Run() {
-	r.Driver().Run()
+	r.Driver().Run() // Inicia el Driver.
 
-	var wg sync.WaitGroup
+	var wg sync.WaitGroup // <- lanza los benchmarks concurrentemente.
 	for _, b := range r.benchmarks {
 		wg.Add(1)
 		go func(b benchmarks.Benchmark, wg *sync.WaitGroup) {
@@ -162,7 +163,7 @@ func (r *Runner) Run() {
 	wg.Wait()
 
 	if r.reporter != nil {
-		r.reporter.report()
+		r.reporter.report() // write resultados de rendimiento.
 	}
 
 	r.Driver().Terminate()
