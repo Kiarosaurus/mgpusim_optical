@@ -7,11 +7,11 @@ import (
 	"github.com/sarchlab/akita/v4/sim"
 )
 
-// *Luz llegando al otro extremo*
+// -- EVENTO : *Entrega de luz llegando* --
 type LinkDeliveryEvent struct {
-	*sim.EventBase
-	Msg     sim.Msg
-	DstPort sim.Port
+	*sim.EventBase // Cumpliendo con interfaz Event.
+	Msg            sim.Msg
+	DstPort        sim.Port
 }
 
 func NewLinkDeliveryEvent(time sim.VTimeInSec, handler sim.Handler, msg sim.Msg, dst sim.Port) *LinkDeliveryEvent {
@@ -22,15 +22,15 @@ func NewLinkDeliveryEvent(time sim.VTimeInSec, handler sim.Handler, msg sim.Msg,
 	}
 }
 
-// Entrega física en el BUFFER de entrada DEL DESTINO.
+// Metiendo un mensaje en el INPUT BUFFER del PORT DESTINO.
 func (e *LinkDeliveryEvent) Execute(engine sim.Engine) error {
-	e.DstPort.Deliver(e.Msg)
+	e.DstPort.Deliver(e.Msg) // Asumimos que la cola no estará llena.
 	return nil
 }
 
-// Fibra Óptica.
+// --- DEFINICIÓN DEL COMPONENTE FIBRA ÓPTICA ---
 type Link struct {
-	*sim.TickingComponent
+	*sim.TickingComponent // Reloj. Da la base.
 
 	SideA   sim.Port
 	SideB   sim.Port
@@ -46,6 +46,17 @@ func NewLink(name string, engine sim.Engine, latency sim.VTimeInSec) *Link {
 	return l
 }
 
+// Cuando el motor despierta al componente...
+func (l *Link) Handle(e sim.Event) error {
+	switch evt := e.(type) {
+	case *LinkDeliveryEvent: // Es nuestro evento de entrega.
+		return evt.Execute(l.Engine)
+	default: // Otra cosa = tick.
+		return l.TickingComponent.Handle(e)
+	}
+}
+
+// --- REQUISITOS INTERFACE CONNECTION ---
 func (l *Link) PlugIn(port sim.Port) {
 
 	fmt.Printf("[DEBUG_PLUGIN] Link '%s' connected to Port '%s' (Pointer: %p).\n", l.Name(), port.Name(), port)
@@ -58,7 +69,7 @@ func (l *Link) PlugIn(port sim.Port) {
 		log.Panicf("OpticalLink %s supports only 2 ports.", l.Name())
 	}
 
-	port.SetConnection(l)
+	port.SetConnection(l) // Guardando un puntero a este cable.
 }
 
 func (l *Link) Unplug(port sim.Port) {
@@ -70,14 +81,14 @@ func (l *Link) Unplug(port sim.Port) {
 }
 
 func (l *Link) NotifyAvailable(port sim.Port) {
+	// No-op.
 }
 
-// Llamado cuando alguien quiere enviar algo.
+// Llamado automáticamente cuando alguien quiere enviar algo.
 func (l *Link) NotifySend() {
 	now := l.Engine.CurrentTime()
 
-	// Revisando si hay mensajes pendientes de salir.
-	// En Akita v4 el Link debe buscar activamente quién quiere enviar.
+	// Se tiene que revisar quién tiene algo porque no hay args.
 	if l.SideA != nil {
 		l.CheckAndForward(now, l.SideA, l.SideB)
 	}
@@ -88,14 +99,14 @@ func (l *Link) NotifySend() {
 
 // --- LÓGICA DE DESEMPAQUETADO ---
 func (l *Link) CheckAndForward(now sim.VTimeInSec, src, dst sim.Port) {
-	msg := src.RetrieveOutgoing() // Extrayendo el mensaje del puerto origen.
+	msg := src.RetrieveOutgoing() // Extrayendo el mensaje del port origen.
 
 	if msg == nil {
 		return
 	}
 
 	if dst == nil {
-		fmt.Printf("[LINK_ERROR] %s: Delivery attempt failed (destination not connected).\n", l.Name())
+		fmt.Printf("[LINK_ERROR] %s: Destination not connected.\n", l.Name())
 		return
 	}
 
@@ -108,17 +119,7 @@ func (l *Link) CheckAndForward(now sim.VTimeInSec, src, dst sim.Port) {
 		fmt.Printf("[LINK_TRAFFIC] %s: %s -> %s (Type: %T)\n", l.Name(), src.Name(), dst.Name(), msg)
 	}
 
-	// La siguiente llegada se basa en la latencia de la fibra.
+	// Diciéndole al motor (Engine) que ejecute luego.
 	evt := NewLinkDeliveryEvent(now+l.Latency, l, msgToDeliver, dst)
-	l.Engine.Schedule(evt)
-}
-
-// Para que sea componente...
-func (l *Link) Handle(e sim.Event) error {
-	switch evt := e.(type) {
-	case *LinkDeliveryEvent:
-		return evt.Execute(l.Engine)
-	default:
-		return l.TickingComponent.Handle(e)
-	}
+	l.Engine.Schedule(evt) // "Despiértenme en now+l"
 }

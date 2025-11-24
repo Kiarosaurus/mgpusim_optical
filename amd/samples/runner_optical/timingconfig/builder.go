@@ -221,11 +221,11 @@ func (b *Builder) createConnection(
 
 	pcieConnector.CreateNetwork("PCIe")
 
-	// Red óptica.
+	// --- RED ÓPTICA ---
 	// No necesitamos crear un "Root Complex" óptico porque es P2P.
 	fmt.Println("[DEBUG_BUILDER] Creando Red Óptica...")
 	b.opticalConnector = optical.NewConnector(b.simulation)
-	fmt.Println("[DEBUG_BUILDER] Registrando Switch Óptico en Simulación...")
+	fmt.Println("[DEBUG_BUILDER] Registrando Switch Óptico en Simulation...")
 	b.simulation.RegisterComponent(b.opticalConnector.Switch)
 	found := false
 	for _, c := range b.simulation.Components() {
@@ -235,9 +235,9 @@ func (b *Builder) createConnection(
 		}
 	}
 	if found {
-		fmt.Println("[DEBUG_BUILDER] ÉXITO: OpticalSwitch encontrado en la lista de componentes.")
+		fmt.Println("[DEBUG_BUILDER] ÉXITO: OpticalSwitch ENCONTRADO en la lista de componentes.")
 	} else {
-		fmt.Println("[DEBUG_BUILDER] ERROR CRÍTICO: OpticalSwitch NO aparece en la lista.")
+		fmt.Println("[DEBUG_BUILDER] ERROR: OpticalSwitch NO ENCONTRADO en la lista de componentes.")
 	}
 
 	// Creación del Root Complex que conecta los puertos del driver y de la MMU.
@@ -300,7 +300,7 @@ func (b *Builder) createGPU(
 	for _, p := range ports {
 		fmt.Printf("   - Puerto analizado: '%s' -> ", p.Name())
 
-		// En r9nano/builder.go los puertos se llaman:
+		// En r9nano/builder.go los puertos del RDMA son:
 		isRDMAReq := strings.Contains(p.Name(), "RDMARequest")
 		isRDMAData := strings.Contains(p.Name(), "RDMAData")
 
